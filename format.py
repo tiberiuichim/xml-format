@@ -40,6 +40,14 @@ def format_node(node, indent=0, add_namespaces=False):
         if node.__class__ is etree._Comment:
             return str(node)
 
+    # see http://www.jclark.com/xml/xmlns.htm
+    uri = "{%s}" % node.nsmap[node.prefix]
+
+    tag = node.tag.replace(uri, '')
+    prefix = node.prefix and (node.prefix + ":") or ""
+
+    ret = "<" + prefix + tag
+
     attrs = []
 
     if add_namespaces:
@@ -59,22 +67,27 @@ def format_node(node, indent=0, add_namespaces=False):
     extras = ""
 
     if attrs:
-        attrs = sorted(set(attrs))
+        attrs = sorted(set(attrs))      # could sort according to algorithm
 
         if len(attrs) == 1:
             extras += " " + attrs[0]
         else:
-            for attr in attrs:
-                extras += "\n" + SEP * (indent + 1) + attr
+            has_newline = bool([True for x in attrs if '\n' in x])
 
-    # see http://www.jclark.com/xml/xmlns.htm
-    uri = "{%s}" % node.nsmap[node.prefix]
+            if has_newline:
+                for attr in attrs:
+                    extras += "\n" + SEP * (indent + 1) + attr
+            else:
+                # first, try to inline all attributes
+                attempt = " ".join(attrs)
 
-    tag = node.tag.replace(uri, '')
-    prefix = node.prefix and (node.prefix + ":") or ""
+                if len(SEP * indent + ret + ' ' + attempt) > 100:
+                    for attr in attrs:
+                        extras += "\n" + SEP * (indent + 1) + attr
+                else:
+                    extras += " " + attempt
 
-    ret = "<" + prefix + tag + extras   # + ">" #ending is unfinished
-    # ret += node.text or ''
+    ret += extras
 
     return ret
 
@@ -123,12 +136,6 @@ def format_text(node_text, indentlevel):
 def rec_node(node, indentlevel, add_namespaces, acc):
     """ Recursively format a node
     """
-    # import pdb
-    # pdb.set_trace()
-
-    # if 'class' in node.tag:
-    #     import pdb
-    #     pdb.set_trace()
     f = format_node(node, indentlevel, add_namespaces=add_namespaces)
     children = list(node.iterchildren())
 
