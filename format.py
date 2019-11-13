@@ -74,12 +74,7 @@ def format_node(node, indent=0, add_namespaces=False):
     prefix = node.prefix and (node.prefix + ":") or ""
 
     ret = "<" + prefix + tag + extras   # + ">" #ending is unfinished
-    ret += node.text or ''
-
-    if node.tail:
-        ret += node.tail
-        # import pdb
-        # pdb.set_trace()
+    # ret += node.text or ''
 
     return ret
 
@@ -100,20 +95,50 @@ def format_end_node(node, children):
     tag = node.tag.replace(uri, '')
     prefix = node.prefix and (node.prefix + ":") or ""
 
-    return "</" + prefix + tag + ">"
+    return "</" + prefix + tag + ">" + (node.tail or '')
+
+
+def format_text(node_text, indentlevel):
+    """ Text can be whitespace or real text.
+    """
+
+    if node_text is None:
+        return ''
+
+    res = ''
+
+    for line in (node_text or '').split('\n'):
+        text = line.strip()
+
+        if text:
+            res += SEP * indentlevel + '\n'
+
+    if not res:
+        if (node_text or '').count('\n') > 1:
+            return '\n'
+
+    return res
 
 
 def rec_node(node, indentlevel, add_namespaces, acc):
     """ Recursively format a node
     """
+    # import pdb
+    # pdb.set_trace()
+
+    # if 'class' in node.tag:
+    #     import pdb
+    #     pdb.set_trace()
     f = format_node(node, indentlevel, add_namespaces=add_namespaces)
     children = list(node.iterchildren())
 
     if node.__class__ is not etree._Comment:
         if not children:
-            f += "/>"
+            f += " />"
         else:
             f += ">"
+
+    f += format_text(node.text, indentlevel)
 
     line = (SEP * indentlevel, f)
     acc.append(line)
@@ -121,10 +146,13 @@ def rec_node(node, indentlevel, add_namespaces, acc):
     for child in children:
         rec_node(child, indentlevel + 1, False, acc)
 
-    endline = format_end_node(node, children)
+    endline = format_end_node(node, children) or ''
+
+    if node.tail:
+        endline += format_text(node.tail, indentlevel)
 
     if endline:
-        acc.append((SEP * indentlevel, endline))
+        acc.append((SEP * indentlevel, endline[:-1]))  # remove \n from endline
 
 
 def format(text):
