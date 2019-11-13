@@ -111,6 +111,30 @@ class TestFormat(unittest.TestCase):
         assert out == '<b:div xmlns:b="http://spam" ' \
             'xmlns="http://bla">\n  <!-- some comment -->\n</b:div>\n'
 
+    def test_mixed_nodes(self):
+        xml = """<div>
+  <adapter name="macro_regions" factory=".catalog.macro_regions" />
+  <!-- <adapter name="SearchableText" factory=".catalog.climate_adapt_content_searchabletext" /> -->
+
+  ----[ Vocabularies: ]------
+
+  <utility name="eea.climateadapt.aceitems_datatypes" component=".vocabulary.aceitem_datatypes_vocabulary"/>
+</div>"""
+        root = lxml.etree.fromstring(xml)
+        acc = []
+        rec_node(root, 0, True, acc)
+        out = print_acc(acc)
+        assert out == '''<div>
+  <adapter factory=".catalog.macro_regions" name="macro_regions" />
+  <!-- <adapter name="SearchableText" factory=".catalog.climate_adapt_content_searchabletext" /> -->
+
+  ----[ Vocabularies: ]------
+
+  <utility
+    component=".vocabulary.aceitem_datatypes_vocabulary"
+    name="eea.climateadapt.aceitems_datatypes" />
+</div>'''
+
 
 if __name__ == '__main__':
     unittest.main()
