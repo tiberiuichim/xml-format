@@ -82,6 +82,35 @@ class TestFormat(unittest.TestCase):
         assert len(acc) == 3
         assert print_acc(acc) == '<div>\n  <!-- some comment -->\n</div>\n'
 
+    def test_ns_tag_only_on_demand(self):
+        root = lxml.etree.fromstring(
+            "<div xmlns='http://bla'><!-- some comment --></div>")
+        acc = []
+        rec_node(root, 0, False, acc)
+        assert len(acc) == 3
+        assert print_acc(acc) == '<div>\n  <!-- some comment -->\n</div>\n'
+
+    def test_ns_tag_included(self):
+        root = lxml.etree.fromstring(
+            "<div xmlns='http://bla'><!-- some comment --></div>")
+        acc = []
+        rec_node(root, 0, True, acc)
+        out = print_acc(acc)
+        assert len(acc) == 3
+        assert out == '<div xmlns="http://bla"'\
+            '>\n  <!-- some comment -->\n</div>\n'
+
+    def test_multiple_ns_tag_included(self):
+        root = lxml.etree.fromstring(
+            "<b:div xmlns='http://bla' xmlns:b="
+            "'http://spam'><!-- some comment --></b:div>")
+        acc = []
+        rec_node(root, 0, True, acc)
+        out = print_acc(acc)
+        assert len(acc) == 3
+        assert out == '<b:div xmlns:b="http://spam" ' \
+            'xmlns="http://bla">\n  <!-- some comment -->\n</b:div>\n'
+
 
 if __name__ == '__main__':
     unittest.main()
