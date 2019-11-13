@@ -1,6 +1,7 @@
 #!./bin/python
 
 import argparse
+import re
 
 from lxml import etree
 
@@ -19,10 +20,25 @@ def format_attr_name(attrname, nsmap):
     return attrname
 
 
+def format_attr_value(name, value, indent):
+    """ Returns a string such as: name="value"
+    """
+
+    if '  ' in value:
+        # XML standard doesn't allow new lines in attribute values
+        # but in case of zpt and zcml files, where we have multiple long
+        # interface names or multiple defines declarations, we want to realign
+        # these values
+        sep = '\n' + SEP * (indent + 1) + ' ' * len('{}="'.format(name))
+        value = re.sub('(\s\s+)', sep, value)
+
+    return '{}="{}"'.format(name, value)
+
+
 def format_node(node, indent=0, add_namespaces=False):
     if not node.nsmap:
         if node.__class__ is etree._Comment:
-            return node
+            return str(node)
 
     attrs = []
 
@@ -37,16 +53,19 @@ def format_node(node, indent=0, add_namespaces=False):
 
     for prefixed_name, value in node.attrib.items():
         name = format_attr_name(prefixed_name, node.nsmap)
-        attr = '{}="{}"'.format(name, value)
-        attrs.append(attr)
+        formatted_attr = format_attr_value(name, value, indent)
+        attrs.append(formatted_attr)
 
     extras = ""
 
     if attrs:
         attrs = sorted(set(attrs))
 
-        for attr in attrs:
-            extras += "\n" + SEP * (indent + 1) + attr
+        if len(attrs) == 1:
+            extras += " " + attrs[0]
+        else:
+            for attr in attrs:
+                extras += "\n" + SEP * (indent + 1) + attr
 
     # see http://www.jclark.com/xml/xmlns.htm
     uri = "{%s}" % node.nsmap[node.prefix]
@@ -54,16 +73,26 @@ def format_node(node, indent=0, add_namespaces=False):
     tag = node.tag.replace(uri, '')
     prefix = node.prefix and (node.prefix + ":") or ""
 
-    ret = "<" + prefix + tag + extras + ">"
+    ret = "<" + prefix + tag + extras   # + ">" #ending is unfinished
     ret += node.text or ''
+
+    if node.tail:
+        ret += node.tail
+        # import pdb
+        # pdb.set_trace()
 
     return ret
 
 
-def format_end_node(node):
+def format_end_node(node, children):
     if not node.nsmap:
         if node.__class__ is etree._Comment:
             return
+
+    text = (node.text or "").strip()
+
+    if not (text or children):
+        return
 
     # see http://www.jclark.com/xml/xmlns.htm
     uri = "{%s}" % node.nsmap[node.prefix]
@@ -78,20 +107,24 @@ def rec_node(node, indentlevel, add_namespaces, acc):
     """ Recursively format a node
     """
     f = format_node(node, indentlevel, add_namespaces=add_namespaces)
+    children = list(node.iterchildren())
+
+    if node.__class__ is not etree._Comment:
+        if not children:
+            f += "/>"
+        else:
+            f += ">"
+
     line = (SEP * indentlevel, f)
     acc.append(line)
 
-    has_children = False
-
-    for child in node.iterchildren():
-        has_children = True
+    for child in children:
         rec_node(child, indentlevel + 1, False, acc)
 
-    if has_children:
-        endline = format_end_node(node)
+    endline = format_end_node(node, children)
 
-        if endline:
-            acc.append((SEP * indentlevel, endline))
+    if endline:
+        acc.append((SEP * indentlevel, endline))
 
 
 def format(text):
@@ -102,17 +135,6 @@ def format(text):
                   '<?xml version="1.0" encoding="UTF-8" standalone="no" ?>'))
 
     rec_node(e, 0, add_namespaces=True, acc=lines)
-
-    # acc = []
-    # add_children(e, acc)
-    #
-    # for child, level in acc:
-    #     lines.append((SEP * level, format_node(child)))
-    #
-    #     # this needs to be optimized and refactored
-    #
-    #     if list(child.iterchildren()):
-    #         lines.append((SEP * level, format_end_node(child)))
 
     return lines
 
