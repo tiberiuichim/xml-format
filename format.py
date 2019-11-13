@@ -112,7 +112,7 @@ def format_end_node(node, children, indentlevel):
     tag = node.tag.replace(uri, '')
     prefix = node.prefix and (node.prefix + ":") or ""
 
-    base = "</" + prefix + tag + ">"
+    base = "</" + prefix + tag + ">\n"
 
     return base + format_text(node.tail, indentlevel)
 
@@ -130,7 +130,7 @@ def format_text(node_text, indentlevel):
         text = line.strip()
 
         if text:
-            res += SEP * indentlevel + '\n'
+            res += "\n" + SEP + SEP * indentlevel + text
 
     if not res:
         if (node_text or '').count('\n') > 1:
@@ -142,16 +142,22 @@ def format_text(node_text, indentlevel):
 def rec_node(node, indentlevel, add_namespaces, acc):
     """ Recursively format a node
     """
+
+    # if 'required' in node.tag:
+    #     import pdb
+    #     pdb.set_trace()
+
     f = format_node(node, indentlevel, add_namespaces=add_namespaces)
     children = list(node.iterchildren())
 
     if node.__class__ is not etree._Comment:
-        if children:
+        if children or (node.text or '').strip():
             f += ">"
         else:
             f += " />"
-
-    f += format_text(node.text, indentlevel)
+        f += format_text(node.text, indentlevel)
+    else:
+        f += format_text(node.tail, indentlevel)
 
     line = (SEP * indentlevel, f)
     acc.append(line)
