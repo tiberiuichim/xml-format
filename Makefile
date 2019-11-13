@@ -1,3 +1,3 @@
 .PHONY: test
 test:
-	bin/pytest tests.py
+	bin/pytest --cov=format tests.py

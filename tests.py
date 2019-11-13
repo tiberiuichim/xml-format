@@ -75,6 +75,13 @@ class TestFormat(unittest.TestCase):
             + SEP * 41 + 'class="blue"\n' \
             + SEP * 41 + 'color="red" />\n'
 
+    def test_preserve_comment(self):
+        root = lxml.etree.fromstring("<div><!-- some comment --></div>")
+        acc = []
+        rec_node(root, 0, False, acc)
+        assert len(acc) == 3
+        assert print_acc(acc) == '<div>\n  <!-- some comment -->\n</div>\n'
+
 
 if __name__ == '__main__':
     unittest.main()
