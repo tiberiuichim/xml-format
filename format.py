@@ -2,6 +2,7 @@
 
 import argparse
 import re
+import sys
 
 from lxml import etree
 
@@ -39,10 +40,6 @@ def format_node(node, indent=0, add_namespaces=False):
     if not node.nsmap:
         if node.__class__ is etree._Comment:
             return str(node)
-
-    # if 'class' in node.tag:
-    #     import pdb
-    #     pdb.set_trace()
 
     # see http://www.jclark.com/xml/xmlns.htm
     uri = "{%s}" % node.nsmap[node.prefix]
@@ -126,11 +123,19 @@ def format_text(node_text, indentlevel):
 
     res = ''
 
-    for line in (node_text or '').split('\n'):
+    lines = (node_text or '').split('\n')
+
+    prev = False
+
+    for line in lines:
         text = line.strip()
 
         if text:
+            prev = True
             res += "\n" + SEP + SEP * indentlevel + text
+        else:
+            if prev:
+                res += "\n"
 
     if not res:
         if (node_text or '').count('\n') > 1:
@@ -142,10 +147,6 @@ def format_text(node_text, indentlevel):
 def rec_node(node, indentlevel, add_namespaces, acc):
     """ Recursively format a node
     """
-
-    # if 'required' in node.tag:
-    #     import pdb
-    #     pdb.set_trace()
 
     f = format_node(node, indentlevel, add_namespaces=add_namespaces)
     children = list(node.iterchildren())
@@ -186,13 +187,16 @@ def format(text):
 if __name__ == "__main__":
 
     parser = argparse.ArgumentParser(description="XML Formatting tool")
-    parser.add_argument('path', type=str,)
+
+    parser.add_argument('infile', nargs='?', type=argparse.FileType('r'),
+                        default=sys.stdin)
+    parser.add_argument('outfile', nargs='?', type=argparse.FileType('w'),
+                        default=sys.stdout)
+
     args = parser.parse_args()
-    path = args.path
-    with open(path) as f:
-        text = f.read().encode('utf-8')
+    text = args.infile.read().encode('utf-8')
 
     lines = format(text)
 
     for line in lines:
-        print(line[0], line[1])
+        args.outfile.write(line[0] + line[1] + "\n")
