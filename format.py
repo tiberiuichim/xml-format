@@ -5,7 +5,7 @@ import re
 
 from lxml import etree
 
-SEP = " " * 2
+SEP = "  "      # 2 spaces
 
 
 def format_attr_name(attrname, nsmap):
@@ -39,6 +39,10 @@ def format_node(node, indent=0, add_namespaces=False):
     if not node.nsmap:
         if node.__class__ is etree._Comment:
             return str(node)
+
+    # if 'class' in node.tag:
+    #     import pdb
+    #     pdb.set_trace()
 
     # see http://www.jclark.com/xml/xmlns.htm
     uri = "{%s}" % node.nsmap[node.prefix]
@@ -92,7 +96,7 @@ def format_node(node, indent=0, add_namespaces=False):
     return ret
 
 
-def format_end_node(node, children):
+def format_end_node(node, children, indentlevel):
     if not node.nsmap:
         if node.__class__ is etree._Comment:
             return
@@ -100,7 +104,7 @@ def format_end_node(node, children):
     text = (node.text or "").strip()
 
     if not (text or children):
-        return
+        return format_text(node.tail, indentlevel)
 
     # see http://www.jclark.com/xml/xmlns.htm
     uri = "{%s}" % node.nsmap[node.prefix]
@@ -108,7 +112,9 @@ def format_end_node(node, children):
     tag = node.tag.replace(uri, '')
     prefix = node.prefix and (node.prefix + ":") or ""
 
-    return "</" + prefix + tag + ">" + (node.tail or '')
+    base = "</" + prefix + tag + ">"
+
+    return base + format_text(node.tail, indentlevel)
 
 
 def format_text(node_text, indentlevel):
@@ -140,10 +146,10 @@ def rec_node(node, indentlevel, add_namespaces, acc):
     children = list(node.iterchildren())
 
     if node.__class__ is not etree._Comment:
-        if not children:
-            f += " />"
-        else:
+        if children:
             f += ">"
+        else:
+            f += " />"
 
     f += format_text(node.text, indentlevel)
 
@@ -153,13 +159,10 @@ def rec_node(node, indentlevel, add_namespaces, acc):
     for child in children:
         rec_node(child, indentlevel + 1, False, acc)
 
-    endline = format_end_node(node, children) or ''
-
-    if node.tail:
-        endline += format_text(node.tail, indentlevel)
+    endline = format_end_node(node, children, indentlevel) or ''
 
     if endline:
-        acc.append((SEP * indentlevel, endline[:-1]))  # remove \n from endline
+        acc.append((SEP * indentlevel, endline[:-1]))
 
 
 def format(text):
@@ -181,7 +184,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
     path = args.path
     with open(path) as f:
-        text = f.read()
+        text = f.read().encode('utf-8')
 
     lines = format(text)
 
