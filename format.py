@@ -7,6 +7,7 @@ import sys
 from lxml import etree
 
 SEP = "  "      # 2 spaces
+MAX_LINE_WIDTH = 100
 
 
 def format_attr_name(attrname, nsmap):
@@ -25,6 +26,8 @@ def format_attr_value(name, value, indent):
     """ Returns a string such as: name="value"
     """
 
+    # assumes value is string
+
     if '  ' in value:
         # XML standard doesn't allow new lines in attribute values
         # but in case of zpt and zcml files, where we have multiple long
@@ -37,21 +40,29 @@ def format_attr_value(name, value, indent):
 
 
 def format_node(node, indent=0, add_namespaces=False):
+    """ Renders and returns an incomplete node, like <div color="red"
+    """
+
+    tag = node.tag
+
     if not node.nsmap:
         if node.__class__ is etree._Comment:
             return str(node)
+    else:
+        # see http://www.jclark.com/xml/xmlns.htm
 
-    # see http://www.jclark.com/xml/xmlns.htm
-    uri = "{%s}" % node.nsmap[node.prefix]
+        uri = "{%s}" % node.nsmap[node.prefix]
 
-    tag = node.tag.replace(uri, '')
+        tag = tag.replace(uri, '')
+
     prefix = node.prefix and (node.prefix + ":") or ""
 
     ret = "<" + prefix + tag
+    rendered_attributes = ""
 
     attrs = []
 
-    if add_namespaces:
+    if add_namespaces:  # only added on top node
         for name, uri in node.nsmap.items():
             attr = 'xmlns{}{}="{}"'.format(
                 name and ':' or '',
@@ -65,35 +76,34 @@ def format_node(node, indent=0, add_namespaces=False):
         formatted_attr = format_attr_value(name, value, indent)
         attrs.append(formatted_attr)
 
-    extras = ""
-
     if attrs:
         attrs = sorted(set(attrs))      # could sort according to algorithm
 
         if len(attrs) == 1:
-            extras += " " + attrs[0]
+            rendered_attributes += " " + attrs[0]
         else:
-            has_newline = bool([True for x in attrs if '\n' in x])
+            # if any attribute value has a new line, don't "inline" attributes
 
-            if has_newline:
+            if bool([True for x in attrs if '\n' in x]):
                 for attr in attrs:
-                    extras += "\n" + SEP * (indent + 1) + attr
+                    rendered_attributes += "\n" + SEP * (indent + 1) + attr
             else:
-                # first, try to inline all attributes
+                # first, try to "inline" all attributes
                 attempt = " ".join(attrs)
 
-                if len(SEP * indent + ret + ' ' + attempt) > 100:
+                if len(SEP * indent + ret + ' ' + attempt) > MAX_LINE_WIDTH:
                     for attr in attrs:
-                        extras += "\n" + SEP * (indent + 1) + attr
+                        rendered_attributes += "\n" + SEP * (indent + 1) + attr
                 else:
-                    extras += " " + attempt
+                    rendered_attributes += " " + attempt
 
-    ret += extras
-
-    return ret
+    return ret + rendered_attributes
 
 
 def format_end_node(node, children, indentlevel):
+    """ Renders the end tag, like: "sometext</div>"
+    """
+
     if not node.nsmap:
         if node.__class__ is etree._Comment:
             return
@@ -101,20 +111,23 @@ def format_end_node(node, children, indentlevel):
     text = (node.text or "").strip()
 
     if not (text or children):
-        return format_text(node.tail, indentlevel)
+        return format_inline_text(node.tail, node, indentlevel)
 
     # see http://www.jclark.com/xml/xmlns.htm
-    uri = "{%s}" % node.nsmap[node.prefix]
+    tag = node.tag
 
-    tag = node.tag.replace(uri, '')
+    if node.nsmap:
+        uri = "{%s}" % node.nsmap[node.prefix]
+        tag = tag.replace(uri, '')
+
     prefix = node.prefix and (node.prefix + ":") or ""
 
     base = "</" + prefix + tag + ">\n"
 
-    return base + format_text(node.tail, indentlevel)
+    return base + format_inline_text(node.tail, node, indentlevel)
 
 
-def format_text(node_text, indentlevel):
+def format_inline_text(node_text, node, indentlevel):
     """ Text can be whitespace or real text.
     """
 
@@ -146,6 +159,8 @@ def format_text(node_text, indentlevel):
 
 def rec_node(node, indentlevel, add_namespaces, acc):
     """ Recursively format a node
+
+    It uses the acc list to accumulate lines for output
     """
 
     f = format_node(node, indentlevel, add_namespaces=add_namespaces)
@@ -153,12 +168,13 @@ def rec_node(node, indentlevel, add_namespaces, acc):
 
     if node.__class__ is not etree._Comment:
         if children or (node.text or '').strip():
+            # this node has children or inline text, needs end tag
             f += ">"
         else:
             f += " />"
-        f += format_text(node.text, indentlevel)
+        f += format_inline_text(node.text, node, indentlevel)
     else:
-        f += format_text(node.tail, indentlevel)
+        f += format_inline_text(node.tail, node, indentlevel)
 
     line = (SEP * indentlevel, f)
     acc.append(line)
@@ -176,6 +192,7 @@ def format(text):
     e = etree.fromstring(text)
 
     lines = []
+    # TODO: keep original xml declaration, if it exists?
     lines.append(('',
                   '<?xml version="1.0" encoding="UTF-8" standalone="no" ?>'))
 
@@ -184,8 +201,7 @@ def format(text):
     return lines
 
 
-if __name__ == "__main__":
-
+def main():
     parser = argparse.ArgumentParser(description="XML Formatting tool")
 
     parser.add_argument('infile', nargs='?', type=argparse.FileType('r'),
@@ -200,3 +216,7 @@ if __name__ == "__main__":
 
     for line in lines:
         args.outfile.write(line[0] + line[1] + "\n")
+
+
+if __name__ == "__main__":
+    main()
