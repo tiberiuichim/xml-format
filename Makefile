@@ -1,3 +1,3 @@
 .PHONY: test
 test:
-	bin/pytest --cov=format tests.py
+	bin/pytest --cov-report term-missing --cov=format tests.py
