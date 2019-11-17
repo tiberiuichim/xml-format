@@ -39,25 +39,7 @@ def format_attr_value(name, value, indent):
     return '{}="{}"'.format(name, value)
 
 
-def format_node(node, indent=0, add_namespaces=False):
-    """ Renders and returns an incomplete node, like <div color="red"
-    """
-
-    tag = node.tag
-
-    if not node.nsmap:
-        if node.__class__ is etree._Comment:
-            return str(node)
-    else:
-        # see http://www.jclark.com/xml/xmlns.htm
-
-        uri = "{%s}" % node.nsmap[node.prefix]
-
-        tag = tag.replace(uri, '')
-
-    prefix = node.prefix and (node.prefix + ":") or ""
-
-    ret = "<" + prefix + tag
+def format_attrs(node, tag, indent, add_namespaces):
     rendered_attributes = ""
 
     attrs = []
@@ -91,13 +73,37 @@ def format_node(node, indent=0, add_namespaces=False):
                 # first, try to "inline" all attributes
                 attempt = " ".join(attrs)
 
-                if len(SEP * indent + ret + ' ' + attempt) > MAX_LINE_WIDTH:
+                if len(SEP * indent + tag + ' ' + attempt) > MAX_LINE_WIDTH:
                     for attr in attrs:
                         rendered_attributes += "\n" + SEP * (indent + 1) + attr
                 else:
                     rendered_attributes += " " + attempt
 
-    return ret + rendered_attributes
+    return rendered_attributes
+
+
+def format_tag(node, indent=0, add_namespaces=False):
+    """ Renders and returns an incomplete node, like <div color="red"
+    """
+
+    tag = node.tag
+
+    if not node.nsmap:
+        if node.__class__ is etree._Comment:
+            return str(node)
+    else:
+        # see http://www.jclark.com/xml/xmlns.htm
+
+        uri = "{%s}" % node.nsmap[node.prefix]
+
+        tag = tag.replace(uri, '')
+
+    prefix = node.prefix and (node.prefix + ":") or ""
+
+    nodetag = "<" + prefix + tag
+    rendered_attributes = format_attrs(node, nodetag, indent, add_namespaces)
+
+    return nodetag + rendered_attributes
 
 
 def format_end_node(node, children, indentlevel):
@@ -106,9 +112,9 @@ def format_end_node(node, children, indentlevel):
 
     if not node.nsmap:
         if node.__class__ is etree._Comment:
-            return
+            return format_inline_text(node.tail or '', node, indentlevel)
 
-    text = (node.text or "").strip()
+    text = (node.text or "")        # .strip()
 
     if not (text or children):
         return format_inline_text(node.tail, node, indentlevel)
@@ -122,7 +128,7 @@ def format_end_node(node, children, indentlevel):
 
     prefix = node.prefix and (node.prefix + ":") or ""
 
-    base = "</" + prefix + tag + ">\n"
+    base = "</" + prefix + tag + ">"
 
     return base + format_inline_text(node.tail, node, indentlevel)
 
@@ -131,74 +137,95 @@ def format_inline_text(node_text, node, indentlevel):
     """ Text can be whitespace or real text.
     """
 
-    if node_text is None:
+    if not node_text:
         return ''
 
-    res = ''
+    sep = SEP * indentlevel
 
-    lines = (node_text or '').split('\n')
+    out = []
 
-    prev = False
-
-    for line in lines:
-        text = line.strip()
-
-        if text:
-            prev = True
-            res += "\n" + SEP + SEP * indentlevel + text
+    for line in node_text.split('\n'):
+        if line.strip():
+            out.append(sep + line.strip())
         else:
-            if prev:
-                res += "\n"
+            out.append('')
 
-    if not res:
-        if (node_text or '').count('\n') > 1:
-            return '\n'
+    return '\n'.join(out)
 
-    return res
+    return '\n'.join(
+        [l.strip() for l in node_text.split('\n')]
+    )
 
 
-def rec_node(node, indentlevel, add_namespaces, acc):
+def visit_node(node, indentlevel, add_namespaces, acc):
     """ Recursively format a node
 
     It uses the acc list to accumulate lines for output
     """
 
-    f = format_node(node, indentlevel, add_namespaces=add_namespaces)
+    f = format_tag(node, indentlevel, add_namespaces=add_namespaces)
     children = list(node.iterchildren())
 
+    # f += format_inline_text(node.tail, node, indentlevel)
+
     if node.__class__ is not etree._Comment:
-        if children or (node.text or '').strip():
+        if children or node.text:
             # this node has children or inline text, needs end tag
             f += ">"
+            f += format_inline_text(node.text, node, indentlevel)
         else:
             f += " />"
-        f += format_inline_text(node.text, node, indentlevel)
-    else:
-        f += format_inline_text(node.tail, node, indentlevel)
 
     line = (SEP * indentlevel, f)
     acc.append(line)
 
+    nextlevel = indentlevel
+
+    # need to look ahead and render the child node, to see if it should be
+    # formatted on inline or not
+
+    if len(node.xpath('.//node()')) > 1:
+        nextlevel += 1
+
     for child in children:
-        rec_node(child, indentlevel + 1, False, acc)
+        visit_node(child, nextlevel, False, acc)
 
     endline = format_end_node(node, children, indentlevel) or ''
 
     if endline:
-        acc.append((SEP * indentlevel, endline[:-1]))
+        acc.append((SEP * indentlevel, endline))        # [:-1]
 
 
-def format(text):
+def _print_acc(acc):
+    out = ""
+
+    for sep, text in acc:
+        out += sep + text
+
+    return cleanup_whitespace(out)
+
+
+def cleanup_whitespace(text):
+    """ Removes the empty whitespace before end of lines """
+
+    out = []
+
+    for line in text.split('\n'):
+        line = re.sub('(\s+$)', '', line)
+        out.append(line)
+
+    return '\n'.join(out)
+
+
+def format_text_as_xml(text):
     e = etree.fromstring(text)
 
-    lines = []
     # TODO: keep original xml declaration, if it exists?
-    lines.append(('',
-                  '<?xml version="1.0" encoding="UTF-8" standalone="no" ?>'))
+    lines = [('', '<?xml version="1.0" encoding="UTF-8" standalone="no" ?>')]
 
-    rec_node(e, 0, add_namespaces=True, acc=lines)
+    visit_node(e, 0, add_namespaces=True, acc=lines)
 
-    return lines
+    return _print_acc(lines)
 
 
 def main():
@@ -212,10 +239,8 @@ def main():
     args = parser.parse_args()
     text = args.infile.read().encode('utf-8')
 
-    lines = format(text)
-
-    for line in lines:
-        args.outfile.write(line[0] + line[1] + "\n")
+    out = format_text_as_xml(text)
+    args.outfile.write(out)
 
 
 if __name__ == "__main__":

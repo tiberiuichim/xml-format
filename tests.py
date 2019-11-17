@@ -2,16 +2,8 @@ import unittest
 
 import lxml.etree
 
-from format import SEP, format_attr_name, format_attr_value, rec_node
-
-
-def print_acc(acc):
-    out = ""
-
-    for sep, text in acc:
-        out += sep + text + '\n'
-
-    return out
+from format import (SEP, _print_acc, format_attr_name, format_attr_value,
+                    visit_node)
 
 
 class TestFormat(unittest.TestCase):
@@ -34,82 +26,78 @@ class TestFormat(unittest.TestCase):
     def test_simple_node(self):
         root = lxml.etree.fromstring("<div>Bla</div>")
         acc = []
-        rec_node(root, 0, False, acc)
+        visit_node(root, 0, False, acc)
         assert len(acc) == 2
-        assert acc[0] == ('', "<div>\n  Bla")
-        assert acc[1] == ('', "</div>")
+        out = _print_acc(acc)
 
-        assert print_acc(acc) == """<div>
-  Bla
-</div>
-"""
+        assert out == """<div>Bla</div>"""
 
     def test_selfclosed_node(self):
         root = lxml.etree.fromstring("<div />")
         acc = []
-        rec_node(root, 0, False, acc)
+        visit_node(root, 0, False, acc)
         assert len(acc) == 1
-        assert print_acc(acc) == "<div />\n"
+        assert _print_acc(acc) == "<div />"
 
     def test_sorted_attribs(self):
         root = lxml.etree.fromstring("""<div color="red" class="blue" />""")
         acc = []
-        rec_node(root, 0, False, acc)
+        visit_node(root, 0, False, acc)
         assert len(acc) == 1
-        assert print_acc(acc) == '<div class="blue" color="red" />\n'
+        assert _print_acc(acc) == '<div class="blue" color="red" />'
 
     def test_selfclosed_node_single_attrib(self):
         root = lxml.etree.fromstring("<div color='red' />")
         acc = []
-        rec_node(root, 0, False, acc)
+        visit_node(root, 0, False, acc)
         assert len(acc) == 1
-        assert print_acc(acc) == '<div color="red" />\n'
+        assert _print_acc(acc) == '<div color="red" />'
 
     def test_selfclosed_node_many_attrib(self):
         root = lxml.etree.fromstring("<div color='red' class='blue' />")
         acc = []
-        rec_node(root, 40, False, acc)
+        visit_node(root, 40, False, acc)
         assert len(acc) == 1
-        assert print_acc(acc) == SEP * 40 + \
+        assert _print_acc(acc) == SEP * 40 + \
             '<div\n' \
             + SEP * 41 + 'class="blue"\n' \
-            + SEP * 41 + 'color="red" />\n'
+            + SEP * 41 + 'color="red" />'
 
     def test_preserve_comment(self):
         root = lxml.etree.fromstring("<div><!-- some comment --></div>")
         acc = []
-        rec_node(root, 0, False, acc)
+        visit_node(root, 0, False, acc)
         assert len(acc) == 3
-        assert print_acc(acc) == '<div>\n  <!-- some comment -->\n</div>\n'
+        assert _print_acc(acc) == '<div><!-- some comment --></div>'
 
     def test_ns_tag_only_on_demand(self):
         root = lxml.etree.fromstring(
             "<div xmlns='http://bla'><!-- some comment --></div>")
         acc = []
-        rec_node(root, 0, False, acc)
+        visit_node(root, 0, False, acc)
         assert len(acc) == 3
-        assert print_acc(acc) == '<div>\n  <!-- some comment -->\n</div>\n'
+        out = _print_acc(acc)
+        assert out == '<div><!-- some comment --></div>'
 
     def test_ns_tag_included(self):
         root = lxml.etree.fromstring(
             "<div xmlns='http://bla'><!-- some comment --></div>")
         acc = []
-        rec_node(root, 0, True, acc)
-        out = print_acc(acc)
+        visit_node(root, 0, True, acc)
+        out = _print_acc(acc)
         assert len(acc) == 3
-        assert out == '<div xmlns="http://bla"'\
-            '>\n  <!-- some comment -->\n</div>\n'
+        assert out == '<div xmlns="http://bla"><!-- some comment --></div>'
 
     def test_multiple_ns_tag_included(self):
         root = lxml.etree.fromstring(
             "<b:div xmlns='http://bla' xmlns:b="
             "'http://spam'><!-- some comment --></b:div>")
         acc = []
-        rec_node(root, 0, True, acc)
-        out = print_acc(acc)
+        visit_node(root, 0, True, acc)
+        out = _print_acc(acc)
         assert len(acc) == 3
         assert out == '<b:div xmlns:b="http://spam" ' \
-            'xmlns="http://bla">\n  <!-- some comment -->\n</b:div>\n'
+            'xmlns="http://bla"><!-- some comment --></b:div>'
 
     def test_mixed_nodes(self):
         xml = """<div>
@@ -122,9 +110,9 @@ class TestFormat(unittest.TestCase):
 </div>"""
         root = lxml.etree.fromstring(xml)
         acc = []
-        rec_node(root, 0, True, acc)
-        out = print_acc(acc)
-        assert out == '''<div>
+        visit_node(root, 0, True, acc)
+        out = _print_acc(acc)
+        test = '''<div>
   <adapter factory=".catalog.macro_regions" name="macro_regions" />
   <!-- <adapter name="SearchableText" factory=".catalog.climate_adapt_content_searchabletext" /> -->
 
@@ -134,6 +122,7 @@ class TestFormat(unittest.TestCase):
     component=".vocabulary.aceitem_datatypes_vocabulary"
     name="eea.climateadapt.aceitems_datatypes" />
 </div>'''
+        assert out == test
 
 
 if __name__ == '__main__':
