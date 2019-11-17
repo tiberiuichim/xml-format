@@ -34,7 +34,7 @@ def format_attr_value(name, value, indent):
         # interface names or multiple defines declarations, we want to realign
         # these values
         sep = '\n' + SEP * (indent + 1) + ' ' * len('{}="'.format(name))
-        value = re.sub('(\s\s+)', sep, value)
+        value = re.sub(r'(\s\s+)', sep, value)
 
     return '{}="{}"'.format(name, value)
 
@@ -140,6 +140,11 @@ def format_inline_text(node_text, node, indentlevel):
     if not node_text:
         return ''
 
+    # if ('\n' not in node_text) and len(node_text) < 60:
+
+    if ('\n' not in node_text):  # don't add indenting to very short text
+        indentlevel = 0
+
     sep = SEP * indentlevel
 
     out = []
@@ -193,6 +198,8 @@ def visit_node(node, indentlevel, add_namespaces, acc):
     endline = format_end_node(node, children, indentlevel) or ''
 
     if endline:
+        if ('\n' not in (node.text or '')) and not children:
+            indentlevel = 0
         acc.append((SEP * indentlevel, endline))        # [:-1]
 
 
@@ -211,7 +218,7 @@ def cleanup_whitespace(text):
     out = []
 
     for line in text.split('\n'):
-        line = re.sub('(\s+$)', '', line)
+        line = re.sub(r'(\s+$)', '', line)
         out.append(line)
 
     return '\n'.join(out)
